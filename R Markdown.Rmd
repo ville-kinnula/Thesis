@@ -1,0 +1,121 @@
+---
+title: "Partition Exchangeability"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+A sample from a de Morgan process:
+```{r}
+deMorganSample = function(p, n) {
+  colors=sample(0:(length(p)-1), n, TRUE, prob=p)
+  colors=replace(colors, colors==0, runif(sum(colors==0)))
+  
+  return(colors)
+}
+```
+
+Calculating frequencies of frequencies, or abundances, from a data vector:
+```{r}
+
+freqToAbundance = function(x) {
+  freqs=list()
+  for (i in 1:length(x)) {
+    if (is.null(freqs[[toString(x[i])]])) {
+      freqs[[toString(x[i])]]=1
+    } else {
+      freqs[[toString(x[i])]]=freqs[[toString(x[i])]]+1
+    }
+  }
+  abundances=list()
+  values=unlist(freqs, use.names = FALSE)
+  print(values)
+  for (i in 1:length(values)) {
+    if (is.null(abundances[[toString(freqs[[i]])]])){
+      abundances[[toString(freqs[[i]])]]=1
+    } else {
+      abundances[[toString(freqs[[i]])]]=abundances[[toString(freqs[[i]])]]+1
+    }
+  }
+  
+  return(list(freqs, abundances))
+}
+```
+More atomically:
+```{r}
+
+frequencies = function(x) {
+  freqs=list()
+  for (i in 1:length(x)) {
+    if (is.null(freqs[[toString(x[i])]])) {
+      freqs[[toString(x[i])]]=1
+    } else {
+      freqs[[toString(x[i])]]=freqs[[toString(x[i])]]+1
+    }
+  }
+  return(freqs)
+}
+abundances = function(freqs) {
+  abundances=list()
+  values=unlist(freqs, use.names = FALSE)
+  for (i in 1:length(values)) {
+    if (is.null(abundances[[toString(freqs[[i]])]])){
+      abundances[[toString(freqs[[i]])]]=1
+    } else {
+      abundances[[toString(freqs[[i]])]]=abundances[[toString(freqs[[i]])]]+1
+    }
+  }
+  abundances=ldply(abundances, .id="frequencies")
+  abundances$frequencies=strtoi(abundances$frequencies)
+  return(abundances[order(abundances$frequencies),])
+}
+```
+
+
+
+Probability from Ewens sampling formula:
+```{r}
+nStirlings= function(psi, n) {
+  return(prod(rep(psi, n)+seq(0, n-1)))
+}
+
+
+Ewens = function(x, psi) {
+  n=sum(x$frequencies*x$V1)
+  rho=x$V1
+  t=x$frequencies
+  product=prod((psi/t)**rho/factorial(rho))
+  
+  
+  return(factorial(n)/nStirlings(psi,n)*product)
+}
+
+```
+
+
+
+abundances(frequencies(deMorganSample(vector of probabilities, n)))
