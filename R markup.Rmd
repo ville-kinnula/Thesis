@@ -1,0 +1,218 @@
+---
+title: "Partition Exchangeability"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+A sample from a de Morgan process:
+```{r}
+deMorganSample = function(p, n) {
+  colors=sample(0:(length(p)-1), n, TRUE, prob=p)
+  colors=replace(colors, colors==0, runif(sum(colors==0)))
+  
+  return(colors)
+}
+```
+
+Calculating frequencies of frequencies, or abundances, from a data vector:
+```{r}
+
+freqToAbundance = function(x) {
+  freqs=list()
+  for (i in 1:length(x)) {
+    if (is.null(freqs[[toString(x[i])]])) {
+      freqs[[toString(x[i])]]=1
+    } else {
+      freqs[[toString(x[i])]]=freqs[[toString(x[i])]]+1
+    }
+  }
+  abundances=list()
+  values=unlist(freqs, use.names = FALSE)
+  print(values)
+  for (i in 1:length(values)) {
+    if (is.null(abundances[[toString(freqs[[i]])]])){
+      abundances[[toString(freqs[[i]])]]=1
+    } else {
+      abundances[[toString(freqs[[i]])]]=abundances[[toString(freqs[[i]])]]+1
+    }
+  }
+  
+  return(list(freqs, abundances))
+}
+```
+More atomically:
+```{r}
+library(plyr)
+
+frequencies = function(x) {
+  freqs=new.env()
+  for (i in 1:length(x)) {
+    if (is.null(freqs[[toString(x[i])]])) {
+      freqs[[toString(x[i])]]=1
+    } else {
+      freqs[[toString(x[i])]]=freqs[[toString(x[i])]]+1
+    }
+  }
+  return(freqs)
+}
+
+abundances = function(freqs, freqs0 = NULL) {
+  if (!is.null(freqs0)) {
+    freqsC=as.environment(as.list(freqs0, all.names=TRUE))
+    for (value in names(freqs)) {
+      freqsC[[value]]=sum(freqsC[[value]],freqs[[value]])
+      }
+    } else {freqsC=freqs}
+  
+  abundances=new.env()
+  values=c()
+  for (name in names(freqsC)) {values=append(values, toString(freqsC[[name]]))}
+  for (value in values) {
+    if (is.null(abundances[[value]])){
+      abundances[[value]]=1
+    } else {
+      abundances[[value]]=abundances[[value]]+1
+    }
+  }
+  abundances=ldply(abundances, .id="frequency")
+  abundances$frequency=strtoi(abundances$frequency)
+  return(abundances[order(abundances$frequency),])
+}
+```
+
+
+
+Probability from Ewens' sampling formula:
+```{r}
+lognStirlings= function(psi, n) {
+  return(sum(log((rep(psi, n)+seq(0, n-1)))))
+}
+
+
+Ewens = function(x, psi) {
+  n=sum(x$frequency*x$V1)
+  rho=x$V1
+  t=x$frequency
+  product=sum(rho*log(psi/t) - lfactorial(rho))
+  
+  
+  return(lfactorial(n) - lognStirlings(psi,n) + product)
+}
+
+```
+
+
+
+Ewens(abundances(frequencies(deMorganSample(vector of probabilities, n))), psi)
+
+
+
+
+"Train" the classifier, which is just getting the frequencies
+```{r}
+train = function(x, y) {
+  #x=Data
+  #y=labels
+  #an estimate of Psi is probably needed here
+  results=list()
+  for (yi in unique(y)) {
+    results[[toString(yi)]]=frequencies(x[yi==y])
+  }
+  return(results)
+}
+
+
+testMarginal = function(train, psi, x) {
+  pred=c()
+  classes=names(train)
+  for (i in 1:length(x)) {
+    probs=cbind(classes, rep(0, length(classes)))
+    for (j in 1:length(classes)) {
+      probs[j,2]=Ewens(abundances(frequencies(x[i]), train[[classes[j]]]), psi)
+    }
+    pred=append(pred, classes[which(probs[,2]==max(probs[,2]))])
+  }
+  return(pred)
+}
+
+```
+testMarginal(h,1, testd)
+
+
+```{r}
+testSimultaneous = function(train, psi, x) {
+  classes=unique(names(train))
+  pred=cbind(x,testMarginal(train, psi, x))
+  predS = cbind(rep(NULL, length(x)), rep(NULL, length(x)))
+  while (sum(pred[,2]==predS[,2])!=length(x)) {
+    predS=pred
+    for (i in 1:length(x)) {
+      probsByClass=c()
+      for (j in 1:length(classes)) {
+        pred[i,2] = classes[j]
+        probsByClass = probsByClass.append(prod(apply(classes, 1, function (y) Ewens(abundances(frequencies(pred[ which(pred[,2]==y) , 1]), train[[y]], psi)))))
+      }
+      pred[i,2] = classes[which.max(probs)]
+    }
+  }
+  
+  return(pred[,2])
+}
+
+
+```
+
+```{r}
+
+mle= function(psi0, n, k) {
+  psi=psi0
+  asum=0
+  last=psi0/2
+  i=0
+  while(abs(asum-k)>10**-5) {
+    i=i+1
+    if(i %% 100 == 0){print(psi)}
+    if (asum<k && last==psi/2) {
+      last=psi
+      psi=2*psi
+    } else if (asum<k){
+      psi1=psi
+      psi= psi + abs(psi-last)/2
+      last=psi1
+    } else {
+      psi1=psi
+      psi= psi - abs(psi-last)/2
+      last=psi1
+    }
+    asum=sum(psi/(psi+seq(0,n-1)))
+  }
+  return(psi)
+}
+
+
+```
